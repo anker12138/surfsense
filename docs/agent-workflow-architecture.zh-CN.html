@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SurfSense Agent 工程说明</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --brand: #0f766e;
+      --brand-soft: #e6fffb;
+      --line: #e5e7eb;
+      --code: #111827;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 10% 10%, #dff7f4 0%, transparent 35%),
+        radial-gradient(circle at 90% 0%, #e9eefc 0%, transparent 30%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #0f766e, #0c4a6e);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 28px;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 30px; }
+    .hero p { margin: 0; opacity: 0.92; }
+    .meta {
+      margin-top: 14px;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .section {
+      margin-top: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px 22px;
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      color: #0f172a;
+      border-left: 5px solid var(--brand);
+      padding-left: 10px;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 18px;
+      color: #0f172a;
+    }
+    ul, ol { margin: 8px 0 8px 22px; }
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin-right: 8px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      border: 1px solid #bff4ea;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fcfdff;
+    }
+    .card h4 { margin: 0 0 6px; font-size: 15px; }
+    .muted { color: var(--muted); }
+    .callout {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    code {
+      background: #eef2ff;
+      color: var(--code);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 13px;
+    }
+    .mermaid {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #ffffff;
+      overflow-x: auto;
+    }
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <h1>SurfSense Agent 工程说明（HTML 版）</h1>
+      <p>覆盖当前实现、目标技术路线、工作流程图与代表性数据处理案例。</p>
+      <div class="meta">版本 v1.0 · 日期 2026-03-11 · 适用范围 surfsense_backend + surfsense_web</div>
+    </section>
+
+    <section class="section">
+      <h2>1. 项目目标</h2>
+      <span class="tag">多源检索</span>
+      <span class="tag">RAG</span>
+      <span class="tag">流式输出</span>
+      <span class="tag">可扩展 Agent</span>
+      <ol>
+        <li>从个人知识源与外部源检索高相关证据。</li>
+        <li>通过混合检索与重排提升回答质量，并输出 citation。</li>
+        <li>流式返回 terminal、sources、正文增量、后续问题。</li>
+        <li>向意图识别、规划、反思、Tool/Skill/Memory 架构演进。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2>2. 当前已实现工作流（As-Is）</h2>
+      <div class="mermaid">
+flowchart TD
+    A[前端 useChat 请求\nselected_connectors/search_mode/top_k/document_ids] --> B[FastAPI POST /api/v1/chat]
+    B --> C[stream_connector_search_results]
+    C --> D[LangGraph Researcher]
+    D --> D1[reformulate_user_query\n战略模型改写查询]
+    D1 --> D2[handle_qna_workflow]
+    D2 --> E[fetch_documents_by_ids\n用户手选文档]
+    D2 --> F[fetch_relevant_documents\n多连接器检索]
+    F --> G[ConnectorService.search_xxx]
+    G --> H[Chunk/Document Hybrid Search\n向量+全文RRF]
+    E --> I[合并去重 all_documents]
+    H --> I
+    I --> J[qna_agent_graph]
+    J --> J1[rerank_documents]
+    J1 --> J2[answer_question\n带 citation prompt]
+    J2 --> K[流式输出 answer text]
+    J2 --> L[返回 reranked_documents]
+    L --> M[generate_further_questions]
+    M --> N[流式输出 FURTHER_QUESTIONS]
+    I --> O[format_sources_delta]
+    O --> P[前端渲染 ChatSources/ChatTerminal/ChatFurtherQuestions]
+      </div>
+
+      <h3>关键说明</h3>
+      <div class="grid">
+        <div class="card">
+          <h4>入口层</h4>
+          <div class="muted">前端携带 connectors、search_mode、top_k、document_ids 发起流式请求。</div>
+        </div>
+        <div class="card">
+          <h4>编排层</h4>
+          <div class="muted">Researcher 主图为线性三节点：改写查询 -> QnA 工作流 -> 后续问题。</div>
+        </div>
+        <div class="card">
+          <h4>检索层</h4>
+          <div class="muted">混合检索（向量 + 全文）+ RRF，支持 chunk/document 两种模式。</div>
+        </div>
+        <div class="card">
+          <h4>生成层</h4>
+          <div class="muted">QnA 子图先 rerank 再 answer，支持 citations 与 token 预算优化。</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        当前已经具备“意图保持式改写”，但尚未引入显式意图分类、规划分支与反思回路。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3. 目标技术路线（To-Be）</h2>
+      <div class="mermaid">
+flowchart TD
+    U[用户输入+会话上下文] --> I0[意图识别 Intent Classifier]
+    I0 -->|QnA| P0[Planner 生成任务计划]
+    I0 -->|Summarize/Action/Podcast| R0[路由到专用子图]
+
+    P0 --> S0[Skill Router\n选择检索技能/执行技能]
+    S0 --> M0[Memory Manager\n短期会话记忆+长期用户记忆]
+    M0 --> T0[Tool Executor]
+
+    T0 --> T1[RAG 检索技能\nHybrid Search + Metadata Filter + Rerank]
+    T0 --> T2[外部实时工具\nTavily/SearxNG/LinkUp]
+    T0 --> T3[业务工具\n连接器状态/索引触发/权限检查]
+
+    T1 --> C0[Context Builder\n证据聚合+去重+预算控制]
+    T2 --> C0
+    T3 --> C0
+
+    C0 --> A0[Answerer 生成初稿]
+    A0 --> Ref0[Reflector 反思审校\n事实覆盖/冲突/引用完整性]
+    Ref0 -->|通过| Out[流式输出\n答案+sources+further questions]
+    Ref0 -->|不通过| P0
+
+    Out --> MemW[写回 Memory\n摘要/用户偏好/任务结果]
+    MemW --> End[结束]
+      </div>
+
+      <h3>能力拆解</h3>
+      <ol>
+        <li>意图识别：输出 intent/confidence/needs_web/needs_memory。</li>
+        <li>规划：把任务拆解为可执行步骤，并记录 execution trace。</li>
+        <li>Tool + Skill：将现有检索与外部搜索统一抽象为可调度能力。</li>
+        <li>反思：覆盖率、引用完整性、冲突处理通过后再对外输出。</li>
+        <li>Memory：会话记忆 + 长期记忆分层管理，并支持有条件写回。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2>3.5 Researcher 具体架构拆解</h2>
+
+      <h3>组件分层（按代码职责）</h3>
+      <div class="grid">
+        <div class="card"><h4>请求入口层</h4><div class="muted">chats_routes 负责鉴权、参数校验、流式响应入口。</div></div>
+        <div class="card"><h4>任务封装层</h4><div class="muted">stream_connector_search_results 负责把请求映射为 graph config 与 state。</div></div>
+        <div class="card"><h4>主编排层</h4><div class="muted">Researcher 图：改写查询 -> QnA 工作流 -> 后续问题。</div></div>
+        <div class="card"><h4>子编排层</h4><div class="muted">QnA 图：rerank_documents -> answer_question。</div></div>
+        <div class="card"><h4>检索聚合层</h4><div class="muted">ConnectorService 统一调度本地索引源与外部 API 源。</div></div>
+        <div class="card"><h4>检索算子层</h4><div class="muted">Chunk/Document Hybrid Search（向量 + 全文 + RRF）。</div></div>
+        <div class="card"><h4>质量增强层</h4><div class="muted">Reranker + token 预算裁剪，提升相关性与稳定性。</div></div>
+        <div class="card"><h4>流式协议层</h4><div class="muted">StreamingService 输出 terminal/sources/text/further_questions。</div></div>
+      </div>
+
+      <h3>节点 I/O 契约</h3>
+      <ol>
+        <li>reformulate_user_query：输入 user_query/chat_history，输出 reformulated_query。</li>
+        <li>handle_qna_workflow：输入 connectors/documents/query，输出 final_report 与 reranked_documents。</li>
+        <li>generate_further_questions：输入 chat_history/reranked_documents，输出 follow-up 问题数组。</li>
+        <li>QnA.rerank_documents：无 reranker 时自动降级为原顺序。</li>
+        <li>QnA.answer_question：拼接 citation/custom prompt，并执行 token 预算裁剪。</li>
+      </ol>
+
+      <h3>Researcher 时序图</h3>
+      <div class="mermaid">
+sequenceDiagram
+    participant UI as Frontend(useChat)
+    participant API as FastAPI /api/v1/chat
+    participant TASK as stream_connector_search_results
+    participant RG as Researcher Graph
+    participant CONN as ConnectorService
+    participant QNA as QnA Graph
+    participant DB as Postgres/pgvector
+
+    UI->>API: POST chat + selected_connectors/search_mode/top_k
+    API->>TASK: create StreamingResponse(generator)
+    TASK->>RG: astream(initial_state, config)
+    RG->>RG: reformulate_user_query
+    RG->>CONN: fetch_relevant_documents
+    CONN->>DB: hybrid_search (vector + full-text)
+    DB-->>CONN: chunks/documents
+    CONN-->>RG: deduplicated documents
+    RG->>QNA: astream(relevant_documents)
+    QNA->>QNA: rerank_documents
+    QNA->>QNA: answer_question
+    QNA-->>RG: final_answer + reranked_documents
+    RG-->>TASK: text delta + sources + terminal + further_questions
+    TASK-->>UI: data stream protocol chunks
+      </div>
+
+      <h3>状态模型与当前边界</h3>
+      <ol>
+        <li>当前状态核心字段：db_session、chat_history、reformulated_query、reranked_documents、final_answer。</li>
+        <li>当前记忆能力以会话短期记忆为主，长期用户记忆尚未落库与召回。</li>
+        <li>当前编排是固定线性链路，尚未进入动态规划与反思回路。</li>
+      </ol>
+
+      <h3>失败与降级策略</h3>
+      <ol>
+        <li>单连接器失败不阻断整体流程，继续检索其他源。</li>
+        <li>无文档时降级到 no-documents prompt，保证可回答。</li>
+        <li>无 reranker 自动降级为原始排序。</li>
+        <li>token 超预算时做文档裁剪，避免超窗失败。</li>
+        <li>后续问题 JSON 解析失败时返回空数组，不影响主回答。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2>4. 数据处理闭环</h2>
+      <h3>4.1 入库链路</h3>
+      <ol>
+        <li>连接器触发异步索引任务（Celery）。</li>
+        <li>源数据标准化，生成 unique_identifier_hash/content_hash。</li>
+        <li>文档摘要、分块、向量化后写入 Document/Chunk。</li>
+      </ol>
+
+      <h3>4.2 查询链路</h3>
+      <ol>
+        <li>接收 query 与检索配置。</li>
+        <li>改写查询并跨源检索。</li>
+        <li>RRF 融合 + 去重 + rerank。</li>
+        <li>上下文预算控制后生成答案与引用。</li>
+        <li>流式输出 terminal、sources、text、further questions。</li>
+      </ol>
+
+      <div class="callout">
+        RRF 评分形式：score(d) = 1/(k + r_semantic(d)) + 1/(k + r_keyword(d))
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>5. 代表性案例（逐步数据处理）</h2>
+
+      <h3>案例 A：发布复盘（Slack + Jira + Notion）</h3>
+      <ol>
+        <li>输入：发布阻塞问题 + 指定三类连接器。</li>
+        <li>处理：改写查询 -> 多源检索 -> 时间与语义聚合。</li>
+        <li>输出：阻塞点、根因、修复动作与 citation。</li>
+      </ol>
+
+      <h3>案例 B：冲突核验（GitHub vs Gmail）</h3>
+      <ol>
+        <li>输入：PR 已修复但用户仍报错。</li>
+        <li>处理：提取提交时间、邮件时间并做时间轴对齐。</li>
+        <li>输出：冲突解释与下一步排查建议。</li>
+      </ol>
+
+      <h3>案例 C：知识缺口（本地命中不足）</h3>
+      <ol>
+        <li>输入：本地库无足够证据的问题。</li>
+        <li>处理：To-Be 路线下自动触发外部检索 skill 补证据。</li>
+        <li>输出：分层置信答案，并写回“知识缺口记忆”。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2>6. 分阶段落地</h2>
+      <ol>
+        <li>Phase 1：先加 detect_intent + planner，不动底层检索实现。</li>
+        <li>Phase 2：接入 reflector，形成“检索-生成-反思-回补”闭环。</li>
+        <li>Phase 3：接入长期记忆与 skill registry，形成统一能力总线。</li>
+      </ol>
+    </section>
+
+    <div class="footer">
+      SurfSense Agent Architecture Notes · HTML 版本可直接用于演示与评审
+    </div>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      securityLevel: "loose",
+      flowchart: { curve: "basis" }
+    });
+  </script>
+</body>
+</html>
