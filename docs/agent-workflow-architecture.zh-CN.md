@@ -129,7 +129,9 @@ $$
 - `user_query`: 用户原始问题
 - `connectors_to_search`: 本轮检索的连接器集合
 - `search_space_id`: 作用域（多租户核心边界）
-- `search_mode`: `CHUNKS` 或 `DOCUMENTS`
+- `search_mode`: `CHUNKS` 或 `DOCUMENTS` chunks返回的是什么  documents 返回的是什么
+   - `CHUNKS`：检索结果以 chunk 形式返回，适合需要细粒度证据的场景，但可能需要更多的后续处理来聚合信息。
+   - `DOCUMENTS`：检索结果以 document 形式返回，适合需要整体上下文的场景，但可能包含更多冗余信息。
 - `document_ids_to_add_in_context`: 用户手选文档
 - `language`: 回复语言
 - `top_k`: 每连接器召回深度
