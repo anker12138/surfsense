@@ -69,6 +69,7 @@ PageLimitService 不是用来解析文件的，而是用来做“用户页数额
 - Unstructured：优先根据 element metadata 里的 page_number 估算
 - LlamaCloud：根据返回 markdown 文档数量或内容长度估算
 - Docling：根据内容长度估算
+- 可本地部署
 
 可以把它理解成“进加工厂前的额度闸机”，不是加工厂本身。
 
@@ -171,7 +172,7 @@ md、markdown、txt 会走“直接读取文本”分支：
 这意味着当前项目对 mp4 的主要存储结果是：
 
 - 转写后的文本
-- 转写文本的摘要
+- 转写文本的摘要 
 - 转写文本的 chunks
 - 文档级和 chunk 级向量
 
@@ -223,7 +224,6 @@ md、markdown、txt 会走“直接读取文本”分支：
 ### 3.1 文件上传（FILE）
 
 FILE 文档写入时会记录 document_type=FILE，并写入 metadata、blocknote、chunks。
-
 - 生成摘要：surfsense_backend/app/tasks/document_processors/file_processors.py:96
 - 创建 chunks：surfsense_backend/app/tasks/document_processors/file_processors.py:101
 - 写入 document_type=FILE：surfsense_backend/app/tasks/document_processors/file_processors.py:136
@@ -233,20 +233,13 @@ FILE 文档写入时会记录 document_type=FILE，并写入 metadata、blocknot
 - documents.content 通常存摘要/结构化总结
 - chunks.content 保存更细粒度正文块，检索主要依赖 chunks
 
+
 ### 3.2 去重和更新是怎么做的
 
 项目不是每次上传都盲目新建文档，而是结合两个哈希字段做判断：
 
 - unique_identifier_hash：表示“这个来源对象是谁”
 - content_hash：表示“当前内容是不是变了”
-
-典型逻辑是：
-
-1. 先用 unique_identifier_hash 找是否已有同源文档
-2. 如果没有，就创建新文档
-3. 如果有，再比较 content_hash
-4. 如果 content_hash 一样，说明内容没变，跳过
-5. 如果 content_hash 不一样，说明内容更新了，覆盖原文档和 chunks
 
 这也是为什么扩展网页、YouTube、文件上传都可以支持“重复导入但只在内容变化时更新”。
 
@@ -287,43 +280,7 @@ selected_connectors 是前端显式传进来的“要搜索哪些来源”的列
 - LINKUP_API
 - BAIDU_SEARCH_API
 
-对应处理分支可以在这里看到：
-
-- surfsense_backend/app/agents/researcher/nodes.py
-
-### 4.2 document_ids_to_add_in_context 是什么
-
-document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思是：
-
-“这些文档不要靠搜索命中，直接加入本次问答上下文。”
-
-它的处理方式不是再检索一遍，而是：
-
-1. 只从当前 search_space 里取这些文档
-2. 把这些文档对应的 chunks 全部查出来
-3. 包装成与普通检索结果相同的上下文格式
-4. 给固定较高分值，再和其他检索结果合并
-
-相关代码：
-
-- 参数校验：surfsense_backend/app/utils/validators.py
-- 文档抓取与包装：surfsense_backend/app/agents/researcher/nodes.py
-
 ## 5. 联网搜索返回结果如何处理
-
-先说一个需要纠正的点：当前仓库里没有 connectors/serpapi.py。
-
-实际在用的联网搜索来源主要是：
-
-- Tavily
-- SearxNG
-- LinkUp
-- Baidu AI Search
-
-定义位置：
-
-- Connector 类型枚举：surfsense_backend/app/db.py
-- 具体实现：surfsense_backend/app/services/connector_service.py
 
 ### 5.1 联网搜索结果会执行哪些处理
 
@@ -334,40 +291,15 @@ document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思
 3. 把结果包装成 source 对象和 document 字典
 4. 直接参与本次回答的上下文构建
 
-例如：
-
-- Tavily：会把 title、content、url、published_date 组装成 document
-- SearxNG：会把 title、content 或 snippet、url、engines 等组装成 document
-- LinkUp：会把 name、content、url、type 组装成 document
-
 ### 5.2 联网搜索结果是多模态还是纯文本
 
-从当前上下文构建逻辑看，进入问答流程的是“文本化结果”：
-
-- 标题
-- 摘要或 snippet
-- URL
-- 少量结构化元数据
-
-不是图片、音频或视频二进制内容。
+从当前上下文构建逻辑看，进入问答流程的是“文本化结果”，其中的视频 图片 会做相应的文本化处理吗：
 
 ### 5.3 联网搜索结果会不会存数据库
 
 当前代码路径下，联网搜索结果不会写入 PostgreSQL documents/chunks 表。
 
 它们是“即取即用”的上下文材料，只存在于当前回答流程里。
-
-### 5.4 联网搜索结果会不会被切块和生成 embedding
-
-当前这条路径下不会。
-
-它们不会像本地文档那样：
-
-- 落库到 documents/chunks
-- 走 Chonkie 切块
-- 生成 embedding
-- 进入本地混合检索索引
-
 它们只是被包装成临时 document 对象，直接供 LLM 回答使用。
 
 
@@ -376,9 +308,9 @@ document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思
 
 ### 6.1 什么时候查 chunks，什么时候查 documents
 
-由请求参数 search_mode 决定。
+由请求参数 search_mode  决定。
 
-默认值是 CHUNKS。
+默认值是 CHUNKS。search_mode怎么定义？智能体会自己修改吗 不能
 
 代码位置：
 
@@ -397,6 +329,8 @@ document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思
   - 先在 documents 表上搜索
   - 命中文档后，再把该文档的 chunks 拉出来返回
   - 所以它不是简单返回摘要，而是“先按文档筛，再展开回 chunk”
+
+
 
 ### 6.2 检索结果怎样打分排序
 
@@ -420,8 +354,7 @@ document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思
 
 
 ### 6.3 检索结果最后怎样进入上下文
-
-最终进入 LLM 的不是数据库对象本身，而是被整理后的 document 列表。
+被整理后的 document 列表。
 
 处理顺序大致是：
 
@@ -437,40 +370,6 @@ document_ids_to_add_in_context 是用户手动指定的文档 ID 列表，意思
 
 - researcher 主流程：surfsense_backend/app/agents/researcher/nodes.py
 - qna rerank 与回答：surfsense_backend/app/agents/researcher/qna_agent/nodes.py
-
-
-## 7. 此项目支持skills吗，是否使用mcp工具调用？
-
-结论分两层。
-
-### 7.1 当前运行时代码层
-
-从当前后端实现看：
-
-- 没有看到 MCP（Model Context Protocol）运行时接入
-- 没有看到通用 skill registry 或 skill executor 的落地实现
-- 当前主流程仍然是 LangGraph 节点直接调用 ConnectorService、QueryService、Retriever、RerankerService 等普通 Python 服务
-
-也就是说，当前系统的核心是：
-
-- LangGraph 负责编排节点
-- 节点内部直接调用项目自己的服务类
-
-不是“通过 MCP 工具调用远端技能”。
-
-### 7.2 设计文档层
-
-仓库里的架构分析文档确实提到过 Tool / Skill / Memory 演进方向，但那更像未来设计，不是当前主线实现。
-
-可参考：
-
-- docs/agent-workflow-architecture.zh-CN.md
-
-因此更准确的结论是：
-
-- 项目有 skill 化和 tool 化的设计思路
-- 但当前后端主实现不是 MCP 架构
-- 也不是一个已经完整落地的通用 skills 系统
 
 
 
