@@ -20,6 +20,10 @@
 - LlamaCloud 类型分支：surfsense_web/components/sources/DocumentUploadTab.tsx:43
 - Docling 类型分支：surfsense_web/components/sources/DocumentUploadTab.tsx:76
 - 默认（Unstructured）类型分支：同文件 else 分支
+  - 这三种类型是分别是什么 怎么选择
+    - Unstructured：开源的文档解析库，支持多种格式，适合本地部署和小规模使用
+    - LlamaCloud：商业文档解析服务，号称支持更复杂的文档结构和更高的解析质量，适合对解析效果有较高要求的用户
+    - Docling：另一种商业文档解析服务，特点和定位与 LlamaCloud 类似，用户可以根据价格、性能和解析效果等因素选择
 - 单文件上限 50MB：surfsense_web/components/sources/DocumentUploadTab.tsx:133
 
 可见前端放开的格式包含：
@@ -202,7 +206,7 @@ md、markdown、txt 会走“直接读取文本”分支：
 具体来说：
 
 - md、txt：直接作为文本
-- pdf、docx、ppt、图片等：先通过 ETL 转成 Markdown 或文本，再按文本存储
+- pdf、docx、ppt、图片等：先通过 **ETL** 转成 Markdown 或文本，再按文本存储
 - mp3、mp4、wav 等：先转写成文本，再按文本存储
 - YouTube：主要围绕转录文本和元数据进行检索，不是直接检索视频本体
 

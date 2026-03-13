@@ -66,6 +66,145 @@ async def say_hello():
 coro = say_hello()   # 此时什么都没发生，coro 只是一个协程对象
 await coro           # 真正执行，打印 "hello"
 ```
+协程底层是依赖什么机制实现的呢？ 线程调度吗？ asyncio是怎样实现的协程调度的呢？
+写一个简单的c语言或python代码说明底层机制
+
+
+async的函数 如果把 await调用，编译后执行async函数的运行指令就会改为定时检测事件是否完成如果完成了就继续执行，如果没有完成就继续执行其他的协程，等到完成了再切回来继续执行这个协程，这样就实现了异步非阻塞的效果。
+
+## 协程的底层机制
+
+### Python asyncio 的事件循环实现
+
+协程并非由线程调度器驱动，而是由**事件循环（Event Loop）** 统一管理。以下是简化的工作原理：
+
+#### Python 伪代码示例
+
+```python
+# 简化的事件循环实现
+class SimpleEventLoop:
+    def __init__(self):
+        self.ready_queue = []      # 就绪的协程
+        self.waiting_tasks = {}    # 等待中的任务
+    
+    def run_until_complete(self, coro):
+        """运行协程直到完成"""
+        task = Task(coro)
+        self.ready_queue.append(task)
+        
+        while self.ready_queue or self.waiting_tasks:
+            # Step 1: 执行就绪协程
+            while self.ready_queue:
+                task = self.ready_queue.pop(0)
+                try:
+                    # 驱动协程执行，直到遇到 await
+                    next_await = task.coro.send(None)
+                except StopIteration as e:
+                    # 协程执行完毕
+                    return e.value
+                else:
+                    # 协程暂停在 await 处，登记到等待队列
+                    self.waiting_tasks[task] = next_await
+            
+            # Step 2: 检查等待中的 I/O 是否完成（poll）
+            for task, io_obj in list(self.waiting_tasks.items()):
+                if io_obj.is_ready():
+                    # I/O 完成，恢复协程
+                    self.waiting_tasks.pop(task)
+                    self.ready_queue.append(task)
+
+# 协程函数
+async def fetch_data():
+    result = await db.query()  # 暂停在这里
+    return result
+
+# 运行
+loop = SimpleEventLoop()
+loop.run_until_complete(fetch_data())
+```
+
+#### 执行时序图
+
+```
+协程实例 fetch_data()
+    │
+    ├─ Task.send(None)  执行至第一个 await
+    │    │
+    │    ├─> await db.query()
+    │    │        ↓
+    │    │    【暂停】协程保存执行状态（栈、局部变量等）
+    │    │        ↓
+    │    │    登记到 waiting_tasks（等待数据库响应）
+    │    │        ↓
+    │    │    事件循环转向处理其他就绪协程 ←── 这就是"异步"的核心
+    │    └─────────────────────────────┐
+    │                                  │
+    ├─ 事件循环 poll 检测                  │（100ms 后数据库返回结果）
+    │    │ I/O 完成 ✓                    │
+    │    │ 将 fetch_data Task 放回 ready  │
+    │    └───────────────────────────┬──┘
+    │                                │
+    ├─ Task.send(db_result)  恢复执行│
+    │    │  从暂停点继续             │
+    │    └─> result = db_result      │
+    │        return result           │
+    │        StopIteration ──────────┘
+```
+
+### C 语言示例：栈保存机制
+
+```c
+// 协程的核心：保存执行状态
+typedef struct {
+    void *stack_ptr;           // 栈指针（栈顶）
+    void *frame_ptr;           // 帧指针（当前函数栈帧）
+    int state;                 // 暂停点标记
+} Coroutine;
+
+// 协程切换伪代码
+void coroutine_yield(Coroutine *coro) {
+    // 保存当前 CPU 状态
+    // - 栈指针 ESP
+    // - 帧指针 EBP  
+    // - 指令指针 EIP（暂停位置）
+    __asm__ ("movl %%esp, %0" : "=r"(coro->stack_ptr));
+    __asm__ ("movl %%ebp, %0" : "=r"(coro->frame_ptr));
+    
+    // 事件循环转向其他协程
+    event_loop_schedule_other();
+}
+
+void coroutine_resume(Coroutine *coro) {
+    // 恢复 CPU 状态
+    __asm__ ("movl %0, %%esp" : : "r"(coro->stack_ptr));
+    __asm__ ("movl %0, %%ebp" : : "r"(coro->frame_ptr));
+    
+    // 从保存的指令指针继续执行
+    __asm__ ("jmp *%0" : : "r"(coro->eip));
+}
+```
+
+#### 栈关键点
+
+- **每个协程有独立的栈**（或共用，取决于实现）
+- **`await` 时保存 SP/BP/IP**，事件循环切换到其他协程的栈
+- **I/O 完成后恢复这些寄存器**，CPU 继续从暂停位置执行
+- **无需操作系统线程调度**，完全在用户态（asyncio）
+
+### 对比：线程 vs 协程
+
+| 特性 | 线程 | 协程 |
+|------|------|------|
+| **调度** | 操作系统内核（抢占式） | 事件循环（协作式） |
+| **上下文切换** | 自动，任何时刻 | 手动，仅在 `await` 时 |
+| **内存成本** | ~1MB（栈） | ~1KB（保存状态） |
+| **数量** | 数千个 | 数百万个 |
+| **同步原语** | Lock、Condition 等 | asyncio.Lock、Event 等 |
+
+---
+
+
+
 
 协程的核心特性：
 - **可暂停**：遇到 `await` 时暂停，把控制权让出去
