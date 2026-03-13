@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable pnpm
+
+# Copy package files and install dependencies
+COPY package.json pnpm-lock.yaml* .npmrc* ./
+COPY source.config.ts ./
+COPY content ./content
+
+RUN pnpm i --frozen-lockfile
+
+EXPOSE 3000
+
+# Use polling for file watching in Docker environments
+ENV WATCHPACK_POLLING=true
+ENV CHOKIDAR_USEPOLLING=true
+
+CMD ["sh", "-c", "pnpm i --frozen-lockfile && pnpm dev"]
