@@ -233,6 +233,9 @@ async def fetch_data():
     return result
 ```
 
+
+```python
+
 ---
 
 ## 五、普通迭代器 vs 异步迭代器
@@ -461,3 +464,13 @@ LangGraph astream
 4. **`async for ... in graph.astream(...)` 能"逐步"读取的本质**：  
    是事件循环在等待每个节点 I/O 时切换协程，节点结束就 yield 一个快照，  
    而不是因为 LLM 在逐 token 输出。
+
+
+langgraph的节点基本是async def的形式，节点内调用LLM的方式有两种：ainvoke和astream。ainvoke是等待LLM生成完整回答后才返回，而astream是边生成边返回token流。当前qna_agent_graph的answer_question节点使用的是ainvoke，所以final_answer是一次性到达的。如果想实现逐token的打字效果，需要改成astream，并在节点内直接推送每个token的delta。
+
+
+async for chunk in researcher_graph.astream(
+    initial_state,
+    config=config,
+    stream_mode="custom",
+):

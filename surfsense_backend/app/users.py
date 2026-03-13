@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import Depends, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, models
+from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, exceptions, models
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.config import config
 from app.db import User, get_user_db
+from app.schemas import UserCreate
 
 
 class BearerResponse(BaseModel):
@@ -47,6 +48,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         self, user: User, token: str, request: Request | None = None
     ):
         print(f"Verification requested for user {user.id}. Verification token: {token}")
+
+    async def authenticate(self, credentials) -> User | None:
+        """In DEV_AUTH_BYPASS mode, accept any password and auto-create unknown accounts."""
+        if config.DEV_AUTH_BYPASS:
+            try:
+                user = await self.get_by_email(credentials.username)
+            except exceptions.UserNotExists:
+                user = await self.create(
+                    UserCreate(
+                        email=credentials.username,
+                        password="dev-bypass-placeholder",
+                        is_verified=True,
+                    ),
+                    safe=True,
+                )
+            return user
+        return await super().authenticate(credentials)
 
 
 async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):
