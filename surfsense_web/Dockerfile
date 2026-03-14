@@ -2,6 +2,11 @@
 
 FROM node:20-alpine AS base
 
+ARG ALPINE_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
+RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/apk/repositories
+
 # Install dependencies only when needed
 FROM base AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
@@ -10,6 +15,7 @@ WORKDIR /app
 
 # Install pnpm
 RUN corepack enable pnpm
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Copy package files
 COPY package.json pnpm-lock.yaml* .npmrc* ./
@@ -28,6 +34,7 @@ WORKDIR /app
 
 # Enable pnpm
 RUN corepack enable pnpm
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Accept build arguments for Next.js public env vars
 ARG NEXT_PUBLIC_FASTAPI_BACKEND_URL

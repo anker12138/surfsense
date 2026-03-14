@@ -1,6 +1,6 @@
 from typing import Any, NamedTuple
 
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages import BaseMessage
 from litellm import get_model_info, token_counter
 

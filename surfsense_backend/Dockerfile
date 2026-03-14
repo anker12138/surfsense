@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies including SSL tools, CUDA dependencies, and Tesseract OCR
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# WSL+Windows proxy setups often fail on plain HTTP; force Debian mirrors to HTTPS.
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     ca-certificates \
@@ -23,6 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Update certificates and install SSL tools
 RUN update-ca-certificates
 RUN pip install --upgrade certifi pip-system-certs
+
+# Keep HTTP/HTTPS proxy, but disable SOCKS ALL_PROXY which breaks pip TLS in this WSL setup.
+ENV ALL_PROXY=
+ENV all_proxy=
+ENV PIP_RETRIES=10
+ENV PIP_DEFAULT_TIMEOUT=120
 
 # Copy requirements
 COPY pyproject.toml .

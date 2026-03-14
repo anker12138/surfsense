@@ -1,10 +1,16 @@
 FROM node:20-alpine
 
+ARG ALPINE_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
+RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/apk/repositories
+
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install pnpm
 RUN corepack enable pnpm
+RUN pnpm config set registry ${NPM_REGISTRY}
 
 # Copy package files and install dependencies
 COPY package.json pnpm-lock.yaml* .npmrc* ./
